@@ -4,7 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -18,17 +21,17 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.app.Activity;
-import android.content.Intent;
-import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.amap.api.location.AMapLocation;
@@ -44,18 +47,32 @@ public class MainActivity extends Activity implements AMapLocationListener{
 	private TextView mShowStatus;
 	private String mLocationCity = "长沙";
 	private String mLocationID = "CN101281601";
-	//天气相关
-	private String mJsonResult;
-	private TextView mWeather;
-	
+	/////////天气相关
+	private TextView mWeather;//数字化显示
+	//当前天气
+	private TextView mTvCurrentCondition,mTvCurrentTmp;
+	private ImageView mIvCurrentIcon;
+	//未来三天的天气
+	private TextView mTvForecOneTmp,mTvForecTwoTmp,mTvForecThreeTmp;//三天的温度显示
+	private TextView mTvForecOneWeek,mTvForecTwoWeek,mTvForecThreeWeek;//三天的星期
+	private ImageView mIvForecOneIcon,mIvForecTwoIcon,mIvForecThreeIcon;//三天的天气图标
+
 	//城市及其ID对应表
 	private String mJsonTable;
-	
+
+	//获得日历项
+	private Calendar mCalendar;
+
+
 	private Handler handler = new Handler(){
 		public void handleMessage(android.os.Message msg) {
 			switch (msg.what) {
 			case 100:
-				mWeather.setText(mJsonResult);
+				//得到传过来的数据
+				SerializableMap data = (SerializableMap) msg.getData().getSerializable("maps");
+				//更改UI，包括数值天气和可视化天气
+				changeUIWithNewData(data.getMaps());
+
 				break;
 			case 200:
 				getWeatherInfo();
@@ -70,14 +87,19 @@ public class MainActivity extends Activity implements AMapLocationListener{
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
-		AssetFileDescriptor fd = getResources().openRawResourceFd(R.raw.t100);
-		Bitmap mMap = BitmapFactory.decodeFileDescriptor(fd.getFileDescriptor());
-		BitmapFactory.decodeResource(getResources(), R.raw.t100);
+		//		AssetFileDescriptor fd = getResources().openRawResourceFd(R.raw.t100);
+		//		Bitmap mMap = BitmapFactory.decodeFileDescriptor(fd.getFileDescriptor());
+		//		BitmapFactory.decodeResource(getResources(), R.raw.t100);
+
 		init();
 	}
 
 	/**     * 初始化定位     */    
 	private void init() {
+
+		//日历项，用来显示星期
+		mCalendar = Calendar.getInstance();
+		
 		/*************************初始化定位************************/
 
 		mShowLocation = (TextView) findViewById(R.id.tv_location_show);
@@ -101,20 +123,82 @@ public class MainActivity extends Activity implements AMapLocationListener{
 
 			@Override
 			public void onClick(View v) {
-				Intent intent = new Intent(MainActivity.this, WeatherInfo.class);
-				startActivity(intent);
+				try {
+					InputStream is = getResources().getAssets().open("100.png");
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+
+				//				Intent intent = new Intent(MainActivity.this, WeatherInfo.class);
+				//				startActivity(intent);
 
 			}
 		});
-		
+
 		///////////////////城市和城市ID对应表
 		mJsonTable = getJsonTable();
-		
+
 		/*************************初始化天气************************/
+		//数字化天气数据
 		mWeather = (TextView) findViewById(R.id.tv_weather_show);
 
+		//当前天气可视化数据
+		mTvCurrentCondition = (TextView) findViewById(R.id.tv_current_condition);
+		mTvCurrentTmp = (TextView) findViewById(R.id.tv_current_tmp);
+		mIvCurrentIcon = (ImageView) findViewById(R.id.iv_current_icon);
+		//未来三天的天气可视化数据
+		mTvForecOneTmp = (TextView) findViewById(R.id.tv_forecast_one_tmp);
+		mTvForecOneWeek = (TextView) findViewById(R.id.tv_forecast_one_week);
+		mIvForecOneIcon = (ImageView) findViewById(R.id.iv_forecast_one_icon);
+
+		mTvForecTwoTmp = (TextView) findViewById(R.id.tv_forecast_two_tmp);
+		mTvForecTwoWeek = (TextView) findViewById(R.id.tv_forecast_two_week);
+		mIvForecTwoIcon = (ImageView) findViewById(R.id.iv_forecast_two_icon);
+
+		mTvForecThreeTmp = (TextView) findViewById(R.id.tv_forecast_three_tmp);
+		mTvForecThreeWeek = (TextView) findViewById(R.id.tv_forecast_three_week);
+		mIvForecThreeIcon = (ImageView) findViewById(R.id.iv_forecast_three_icon);
 
 	}
+
+	//用获取的天气数据更新UI
+	private void changeUIWithNewData(Map<String,String> maps){
+		//数值化的天气
+		mWeather.setText(maps.get("details"));
+		//可视化的天气
+		mTvCurrentCondition.setText(maps.get("now_txt"));   //今天
+		mIvCurrentIcon.setImageBitmap(getPictureById(maps.get("now_code")));
+		//mIvCurrentIcon.setImageResource(R.drawable.ic_launcher);
+		mTvCurrentTmp.setText(maps.get("now_tmp")+"°");
+
+		
+		//第一天
+		mIvForecOneIcon.setImageBitmap(getPictureById(maps.get("daily_forecast_1_cond_code_d")));
+		mTvForecOneTmp.setText(maps.get("daily_forecast_1_tmp_min")+"°～"+maps.get("daily_forecast_1_tmp_max")+"°");
+		
+		mCalendar.setTimeInMillis(System.currentTimeMillis()+24*3600*1000);
+		mTvForecOneWeek.setText(showWeekByNumber(mCalendar.get(Calendar.DAY_OF_WEEK)));
+
+		//第二天
+		mIvForecTwoIcon.setImageBitmap(getPictureById(maps.get("daily_forecast_2_cond_code_d")));
+		mTvForecTwoTmp.setText(maps.get("daily_forecast_2_tmp_min")+"°～"+maps.get("daily_forecast_2_tmp_max")+"°");
+		
+		mCalendar.setTimeInMillis(System.currentTimeMillis()+48*3600*1000);
+		mTvForecTwoWeek.setText(showWeekByNumber(mCalendar.get(Calendar.DAY_OF_WEEK)));
+
+		//第三天
+		mIvForecThreeIcon.setImageBitmap(getPictureById(maps.get("daily_forecast_3_cond_code_d")));
+		mTvForecThreeTmp.setText(maps.get("daily_forecast_3_tmp_min")+"°～"+maps.get("daily_forecast_3_tmp_max")+"°");
+		
+		mCalendar.setTimeInMillis(System.currentTimeMillis()+72*3600*1000);
+		mTvForecThreeWeek.setText(showWeekByNumber(mCalendar.get(Calendar.DAY_OF_WEEK)));
+
+	}
+
+
+
 
 	@Override
 	public void onLocationChanged(Location location) {
@@ -179,24 +263,21 @@ public class MainActivity extends Activity implements AMapLocationListener{
 				mLocationID = parseCityID(mJsonTable, mLocationCity);
 				String httpUrl = "https://api.heweather.com/x3/weather?cityid="+mLocationID+
 						"&key=59cc19b8b8ab45cca41ae89df97370df";
-				mJsonResult = requestJson(httpUrl);
+				String temp = request(httpUrl);
+				//Map<String,String> mMaps = parseJsonData(temp);
 
-
-				System.out.println(mJsonResult);
-				Log.i("aaa", mJsonResult);
-				handler.sendEmptyMessage(100);
+				SerializableMap maps = new SerializableMap(parseJsonData(temp));
+				Message msg = new Message();
+				msg.what = 100;
+				Bundle bundle = new Bundle();
+				bundle.putSerializable("maps", maps);
+				msg.setData(bundle);
+				handler.sendMessage(msg);
 			}
 		}).start();
 
 	}
 
-	public String requestJson(String httpUrl) {
-		String result = null;
-		String temp = request(httpUrl);
-		result = parseJsonData(temp);
-
-		return result;
-	}
 
 	//根据url地址得到网页内容
 	public static String request(String httpUrl) {
@@ -220,9 +301,9 @@ public class MainActivity extends Activity implements AMapLocationListener{
 		return result;
 	}
 
-	private String parseJsonData(String jsonData){
+	private Map<String,String> parseJsonData(String jsonData){
 		StringBuilder sb = new StringBuilder();
-
+		Map<String,String> mWeatherMap = new HashMap<String, String>();
 		try {
 			//整段数据就是一个json对象a
 			JSONObject mJsonObject = new JSONObject(jsonData);
@@ -261,11 +342,28 @@ public class MainActivity extends Activity implements AMapLocationListener{
 					+"明天  最高温度："+daily_forecast_1_tmp_min+" 最高温度："+daily_forecast_1_tmp_max+" 天气状况："+daily_forecast_1_cond_txt_d+" 天气状况代码："+daily_forecast_1_cond_code_d+"\n"
 					+"后天  最高温度："+daily_forecast_2_tmp_min+" 最高温度："+daily_forecast_2_tmp_max+" 天气状况："+daily_forecast_2_cond_txt_d+" 天气状况代码："+daily_forecast_2_cond_code_d+"\n"
 					+"大后天  最高温度："+daily_forecast_3_tmp_min+" 最高温度："+daily_forecast_3_tmp_max+" 天气状况："+daily_forecast_3_cond_txt_d+" 天气状况代码："+daily_forecast_3_cond_code_d+"\n");
-			return sb.toString();
+
+			mWeatherMap.put("now_tmp", now_tmp);//实时天气状况
+			mWeatherMap.put("now_txt", now_txt);
+			mWeatherMap.put("now_code", now_code);
+			mWeatherMap.put("daily_forecast_1_tmp_min", daily_forecast_1_tmp_min);//明天的天气状况
+			mWeatherMap.put("daily_forecast_1_tmp_max", daily_forecast_1_tmp_max);
+			mWeatherMap.put("daily_forecast_1_cond_txt_d", daily_forecast_1_cond_txt_d);
+			mWeatherMap.put("daily_forecast_1_cond_code_d", daily_forecast_1_cond_code_d);
+			mWeatherMap.put("daily_forecast_2_tmp_min", daily_forecast_2_tmp_min);//后天的天气状况
+			mWeatherMap.put("daily_forecast_2_tmp_max", daily_forecast_2_tmp_max);
+			mWeatherMap.put("daily_forecast_2_cond_txt_d", daily_forecast_2_cond_txt_d);
+			mWeatherMap.put("daily_forecast_2_cond_code_d", daily_forecast_2_cond_code_d);
+			mWeatherMap.put("daily_forecast_3_tmp_min", daily_forecast_3_tmp_min);//大后天的天气状况
+			mWeatherMap.put("daily_forecast_3_tmp_max", daily_forecast_3_tmp_max);
+			mWeatherMap.put("daily_forecast_3_cond_txt_d", daily_forecast_3_cond_txt_d);
+			mWeatherMap.put("daily_forecast_3_cond_code_d", daily_forecast_3_cond_code_d);
+			mWeatherMap.put("details", sb.toString());
+			return mWeatherMap;
 		} catch (JSONException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-			return e.getMessage();
+			return null;
 		}
 	}
 
@@ -318,7 +416,52 @@ public class MainActivity extends Activity implements AMapLocationListener{
 		}
 	}
 
+	///根据天气码得到相应天气图片
+	private Bitmap getPictureById(String code){
+		Bitmap mBitmap = null;
+		try {
+			InputStream is = getResources().getAssets().open(code+".png");
+			mBitmap = BitmapFactory.decodeStream(is);
 
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		return mBitmap;
+	}
+
+	//根据数字显示星期
+	private String showWeekByNumber(int num){
+		String result = null;
+		switch(num){
+		case 1:
+			result = "星期日";
+			break;
+		case 2:
+			result = "星期一";
+			break;
+		case 3:
+			result = "星期二";
+			break;
+		case 4:
+			result = "星期三";
+			break;
+		case 5:
+			result = "星期四";
+			break;
+		case 6:
+			result = "星期五";
+			break;
+		case 7:
+			result = "星期六";
+			break;
+		default:
+			break;
+		}
+
+		return result;
+	}
 
 
 }
