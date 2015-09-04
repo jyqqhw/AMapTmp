@@ -1,7 +1,9 @@
 package com.eebbk.amaptmp;
 
-import java.io.FileDescriptor;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.List;
 
 import org.apache.http.HttpEntity;
@@ -15,11 +17,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import com.amap.api.location.AMapLocation;
-import com.amap.api.location.AMapLocationListener;
-import com.amap.api.location.LocationManagerProxy;
-import com.amap.api.location.LocationProviderProxy;
-
 import android.app.Activity;
 import android.content.Intent;
 import android.content.res.AssetFileDescriptor;
@@ -29,12 +26,15 @@ import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.TextView;
+
+import com.amap.api.location.AMapLocation;
+import com.amap.api.location.AMapLocationListener;
+import com.amap.api.location.LocationManagerProxy;
+import com.amap.api.location.LocationProviderProxy;
 
 public class MainActivity extends Activity implements AMapLocationListener{
 	//位置相关
@@ -42,12 +42,15 @@ public class MainActivity extends Activity implements AMapLocationListener{
 	private Button mToWeather;
 	private TextView mShowLocation;
 	private TextView mShowStatus;
-	private String mLocationCity;
-	private String mLocationID;
+	private String mLocationCity = "长沙";
+	private String mLocationID = "CN101281601";
 	//天气相关
 	private String mJsonResult;
 	private TextView mWeather;
-
+	
+	//城市及其ID对应表
+	private String mJsonTable;
+	
 	private Handler handler = new Handler(){
 		public void handleMessage(android.os.Message msg) {
 			switch (msg.what) {
@@ -62,7 +65,6 @@ public class MainActivity extends Activity implements AMapLocationListener{
 			}
 		};
 	};
-	private String mCityID = "CN101281601";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -104,10 +106,13 @@ public class MainActivity extends Activity implements AMapLocationListener{
 
 			}
 		});
-
+		
+		///////////////////城市和城市ID对应表
+		mJsonTable = getJsonTable();
+		
 		/*************************初始化天气************************/
 		mWeather = (TextView) findViewById(R.id.tv_weather_show);
-		
+
 
 	}
 
@@ -171,7 +176,8 @@ public class MainActivity extends Activity implements AMapLocationListener{
 
 			@Override
 			public void run() {
-				String httpUrl = "https://api.heweather.com/x3/weather?cityid="+mCityID  +
+				mLocationID = parseCityID(mJsonTable, mLocationCity);
+				String httpUrl = "https://api.heweather.com/x3/weather?cityid="+mLocationID+
 						"&key=59cc19b8b8ab45cca41ae89df97370df";
 				mJsonResult = requestJson(httpUrl);
 
@@ -263,6 +269,54 @@ public class MainActivity extends Activity implements AMapLocationListener{
 		}
 	}
 
+
+	//解析json数据，得到城市ID
+	private String parseCityID(String jsonTable,String city){
+		String cityID = "CN101281601";
+		if(jsonTable != null){
+			try {
+				JSONObject mJsonObject = new JSONObject(jsonTable);
+				cityID = mJsonObject.getString(city);
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+		}
+
+		return cityID;
+	}
+
+	//从raw文件夹中获取json数据
+	private String getJsonTable(){
+		BufferedReader br = null;
+		StringBuffer sb = new StringBuffer();
+		try {
+			InputStream is = getResources().openRawResource(R.raw.city_code);
+			br = new BufferedReader(new InputStreamReader(is,"gbk"));
+
+			String str = null;
+
+			while((str = br.readLine()) != null){
+				sb.append(str);
+			}
+			return sb.toString();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		}finally{
+			try {
+
+				if(br != null){
+					br.close();
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
 
 
 
